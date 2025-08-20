@@ -14,9 +14,13 @@ async def usb_to_uart():
 
     while True:
         if poll.poll(0):  # Check if USB has incoming data
-            data = sys.stdin.read(1)
+            data = sys.stdin.read()  # Read all available data
             if data:
-                uart.write(data)
+                try:
+                    uart.write(data)
+                except Exception:
+                    # If writing to UART fails, ignore and continue
+                    pass
         await asyncio.sleep(0)  # Yield to other tasks
 
 async def uart_to_usb():
@@ -27,8 +31,9 @@ async def uart_to_usb():
             if data:
                 try:
                     sys.stdout.write(data.decode(errors="ignore"))
-                except UnicodeError:
-                    pass
+                except Exception:
+                    # If decoding fails, write raw data
+                    sys.stdout.write(data)
         await asyncio.sleep(0)  # Yield to other tasks
 
 async def main():
