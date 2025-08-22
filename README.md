@@ -19,20 +19,20 @@ A robust, non-blocking USB-to-UART bridge for the Raspberry Pi Pico using MicroP
 
 ```
 Raspberry Pi Pico    UART Device
-     ______           _________
-    |      |         |         |
-    | GP0  |-------->| RX      |
-    |      |         |         |
-    | GP1  |<--------| TX      |
-    |      |         |         |
-    | GND  |---------| GND     |
-    |______|         |_________|
-```
+     __________           _________
+    |          |         |         |
+    | GP0 (TX) |-------->| RX      |
+    | GP1 (RX) |<--------| TX      |
+    | GND      |---------| GND     |
+    |__________|         |_________|
+
+Note: GP0 is the transmit (TX) pin and GP1 is the receive (RX) pin on the Pico.
+When connecting to another device, remember to connect TX to RX (GP0 to RX of device, GP1 to TX of device).
 
 ## Usage
 
 1. Flash MicroPython to your Pico
-2. Save this script as `main_new.py` on the Pico
+2. Save this script as `main.py` on the Pico
 3. Connect your UART device:
    - GP0 → RX of device
    - GP1 → TX of device
@@ -42,9 +42,11 @@ Raspberry Pi Pico    UART Device
 
 ## How It Works
 
-The bridge uses two asynchronous tasks:
+The bridge uses two asynchronous tasks with uasyncio:
 - `usb_to_uart()`: Reads data from USB and writes it to UART
 - `uart_to_usb()`: Reads data from UART and writes it to USB
+
+Both tasks run concurrently using `asyncio.gather()`, ensuring bidirectional communication without blocking. The implementation uses `select.poll()` for efficient USB input detection (checking if data is available before reading) and `uart.any()` for UART input detection.
 
 ## Troubleshooting
 
@@ -89,7 +91,7 @@ If you're experiencing issues with the USB-to-UART bridge, try these solutions:
 ### 5. Code Issues
 
 - **Firmware**: Ensure you're using a recent version of MicroPython for the Pico
-- **File name**: Make sure the script is saved as `main_new.py` on the Pico
+- **File name**: Make sure the script is saved as `main.py` on the Pico
 - **Reset device**: Try unplugging and replugging the Pico
 
 ### 6. Debugging
@@ -100,4 +102,3 @@ If you're experiencing issues with the USB-to-UART bridge, try these solutions:
   screen /dev/ttyACM0 115200
   ```
   You should see "USB-to-UART bridge started" when the script runs correctly.
-Both tasks run concurrently using `asyncio.gather()`, ensuring bidirectional communication without blocking. The implementation uses `select.poll()` for efficient USB input detection (checking if data is available before reading) and `uart.any()` for UART input detection.

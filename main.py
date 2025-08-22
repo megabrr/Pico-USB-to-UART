@@ -1,65 +1,76 @@
 #!/usr/bin/env micropython
-from _thread import start_new_thread
-from machine import UART, Pin
-import time
+import uasyncio as asyncio
 import select
+from machine import UART, Pin
 import sys
 
 # UART Configuration
 UART0 = 0
 TX_PIN = 0
 RX_PIN = 1
+BAUD_RATE = 115200
 
 # Initialize UART with explicit settings for device communication
-uart = UART(UART0, 115200, parity=None, bits=8, stop=1, 
+uart = UART(UART0, BAUD_RATE, parity=None, bits=8, stop=1, 
             tx=Pin(TX_PIN, Pin.OUT), rx=Pin(RX_PIN, Pin.IN),
             timeout=0)  # No timeout for immediate response
 
-print("Minimal USB-to-UART Bridge Started", file=sys.stderr)
-print("Press F7 to access router BIOS", file=sys.stderr)
+# Set up poll for stdin
+poll = select.poll()
+poll.register(sys.stdin, select.POLLIN)
 
-# RX thread - UART to USB
-def rx_thread():
-    print("RX thread started...", file=sys.stderr)
-    while True:
-        # Read any available data from UART
-        if uart.any():
-            data = uart.read()
-            if data:
-                # Forward directly to USB stdout
-                sys.stdout.write(data)
-                try:
-                    sys.stdout.flush()
-                except:
-                    pass
-        # Minimal delay
-        time.sleep(0.0001)
+print("USB-to-UART Bridge Started")
 
-# Start RX thread on core1
-print("Starting RX thread...", file=sys.stderr)
-start_new_thread(rx_thread, ())
-
-# Main thread - USB to UART
-print("Starting USB-to-UART forwarding...", file=sys.stderr)
-try:
-    # Register stdin for polling
-    poll = select.poll()
-    poll.register(sys.stdin, select.POLLIN)
-    
-    while True:
-        # Check for USB input
-        if poll.poll(0):
-            try:
-                # Read all available input
+async def usb_to_uart():
+    """Forward data from USB to UART"""
+    print("USB-to-UART task started...")
+    try:
+        while True:
+            # Check if data is available on USB using poll
+            if poll.poll(0):  # Non-blocking check
                 data = sys.stdin.read(1024)
                 if data:
-                    # Forward directly to UART
+                    # Forward to UART
                     uart.write(data)
-            except:
-                pass
-        
-        # Minimal delay for responsiveness
-        time.sleep(0.0001)
-        
+            # Yield control to event loop
+            await asyncio.sleep_ms(1)
+    except Exception as e:
+        print(f"USB-to-UART error: {e}")
+
+async def uart_to_usb():
+    """Forward data from UART to USB"""
+    print("UART-to-USB task started...")
+    try:
+        while True:
+            # Check if data is available on UART
+            if uart.any():
+                data = uart.read()
+                if data:
+                    # Forward to USB
+                    sys.stdout.write(data)
+                    try:
+                        sys.stdout.flush()
+                    except:
+                        pass
+            # Yield control to event loop
+            await asyncio.sleep_ms(1)
+    except Exception as e:
+        print(f"UART-to-USB error: {e}")
+
+async def main():
+    """Main function to run both tasks concurrently"""
+    print("Starting USB-to-UART bridge...")
+    # Run both tasks concurrently
+    await asyncio.gather(
+        usb_to_uart(),
+        uart_to_usb()
+    )
+
+# Run the main async function
+try:
+    asyncio.run(main())
 except KeyboardInterrupt:
-    print("\nExiting...", file=sys.stderr)
+    print("\nExiting...")
+finally:
+    # Clean up
+    uart.deinit()
